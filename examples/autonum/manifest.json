@@ -30,6 +30,7 @@
             "https://js.cybozu.com/jquery/2.1.3/jquery.min.js",
             "https://js.kintone.com/momentjs/2.14.1/moment-with-locales.min.js",
             "https://js.kintone.com/jsrender/0.9.80/jsrender.min.js",
+            "https://unpkg.com/kintone-ui-component@1.0.0/umd/kuc.min.js",
             "js/config.js"
         ],
         "css": [

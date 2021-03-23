@@ -184,16 +184,27 @@
                 formSetting: '.kintoneplugin-setting-form',
                 formSubmit: '.form-submit',
                 input: {
-                    fieldCode: '#autonum-fieldselect',
-                    prefix: '#autonum-prefix',
-                    timing: 'input[name="autonum-resetTiming"]',
-                    preview: '#autonum-preview',
-                    apiToken: '#autonum-api-token',
-                    numberOfDigit: '#autonum-number-of-digit',
-                    textFormatSelect: '#autonum-textFormat-select',
-                    dateFormatSelect: '#autonum-dateFormat-select',
-                    connectiveSelect: '#autonum-connective-select'
-                }
+                    fieldCode: null,
+                    prefix: null,
+                    timing: null,
+                    preview: null,
+                    apiToken: null,
+                    numberOfDigit: null,
+                    textFormatSelect: null,
+                    dateFormatSelect: null,
+                    connectiveSelect: null
+                },
+                saveButton: null,
+                cancelButton: null,
+                targetField: '.target-field',
+                numberingOfDigits: '.numbering-of-digits',
+                selectFormat: '.select-format',
+                dateFormat: '.date-format',
+                textFormat: '.text-format',
+                connective: '.connective',
+                numPreview: '.num-preview',
+                resetTiming: '.reset-timing',
+                apiToken: '.api-token'
             },
             apiURL: {
                 formField: kintone.api.url('/k/v1/preview/app/form/fields', true)
@@ -203,6 +214,7 @@
                 CLIENT_MIN_HEIGHT_PX: 750
             }
         },
+        singleLineTextFields: [],
         init: function() {
             var self = this;
             this.settings.lang = kintone.getLoginUser().language;
@@ -225,30 +237,20 @@
 
                         var prop = respone.properties[key];
                         if (prop.type === 'SINGLE_LINE_TEXT') {
-                            var option = $('<option/>');
-                            option.attr('value', self.escapeHtml(prop.code))
-                                .text(self.escapeHtml(prop.label));
-
-                            $(self.settings.element.input.fieldCode).append(option);
+                            self.singleLineTextFields.push(prop);
                         }
                     }
                     $(self.settings.element.form).removeClass('loading');
-                    self.templateRender();
+                    self.createElements();
+                    self.listenAction();
+                    self.appendElements();
+                    self.checkAutonumFormat();
+                    self.uiSetFormSubmitIsFixed();
+                    self.listenWindowResize();
                 });
 
         },
-        templateRender: function() {
-            var self = this;
-            var configHtml = $(this.settings.element.form).html();
-            var tmpl = $.templates(configHtml);
-            $(this.settings.element.form).html(tmpl.render({
-                lang: this.settings.i18n
-            })).show();
-
-            self.setDefault();
-            self.listenAction();
-
-            self.uiSetFormSubmitIsFixed();
+        listenWindowResize: function() {
             var timeoutResize;
             $(window).resize(function() {
                 clearTimeout(timeoutResize);
@@ -257,32 +259,113 @@
                 }, 150);
             });
         },
-        setDefault: function() {
-            var conf = this.settings.config.plugin;
-            var apiToken = this.settings.config.proxy ? this.settings.config.proxy.headers['X-Cybozu-API-Token'] : '';
-            if (Object.keys(conf).length === 0) {
-                return false;
-            }
-            $(this.settings.element.input.fieldCode).val(conf['autoNumberingFieldcode']);
-            $(this.settings.element.input.textFormatSelect).val(conf['format']);
-            $(this.settings.element.input.dateFormatSelect).val(conf['dateFormat']);
-            $(this.settings.element.input.connectiveSelect).val(conf['connective']);
-            $(this.settings.element.input.prefix).val(conf['text']);
-            $(this.settings.element.input.preview).text(conf['preview']);
-            $(this.settings.element.input.timing).val([conf['timing']]);
-            $(this.settings.element.input.apiToken).val(apiToken);
-            $(this.settings.element.input.numberOfDigit).val(conf['numOfDigit']);
-            this.checkAutonumFormat();
+        createElements: function() {
+            this.settings.element.saveButton = new Kuc.Button({
+                text: this.settings.i18n.saveButton,
+                type: 'submit'
+            });
+            this.settings.element.cancelButton = new Kuc.Button({
+                text: this.settings.i18n.cancelButton,
+                type: 'normal'
+            });
+            this.settings.element.input.fieldCode = new Kuc.Dropdown({
+                label: this.settings.i18n.targetField,
+                requiredIcon: true,
+                items: this.addEmptyItem($.map(this.singleLineTextFields, function(singleLineTextField) {
+                    return {
+                        label: singleLineTextField.label,
+                        value: singleLineTextField.code
+                    };
+                })),
+                value: this.settings.config.plugin.autoNumberingFieldcode
+            });
+            this.settings.element.input.numberOfDigit = new Kuc.Text({
+                label: this.settings.i18n.numberingOfDigits,
+                requiredIcon: true,
+                textAlign: 'right',
+                value: this.settings.config.plugin.numOfDigit
+            });
+            this.settings.element.input.textFormatSelect = new Kuc.Dropdown({
+                label: this.settings.i18n.selectFormat,
+                requiredIcon: true,
+                items: this.addEmptyItem($.map(this.settings.i18n.typeOfFormat, function(typeOfFormatValue, typeOfFormatLabel) {
+                    return {
+                        label: typeOfFormatValue,
+                        value: typeOfFormatLabel
+                    };
+                })),
+                value: this.settings.config.plugin.format
+            });
+            this.settings.element.input.dateFormatSelect = new Kuc.Dropdown({
+                label: this.settings.i18n.dateFormat,
+                items: this.addEmptyItem($.map(this.settings.i18n.typeOfDateFormat, function(typeOfDateFormatValue, typeOfDateFormatLabel) {
+                    return {
+                        label: typeOfDateFormatValue,
+                        value: typeOfDateFormatLabel
+                    };
+                })),
+                value: this.settings.config.plugin.dateFormat
+            });
+            this.settings.element.input.prefix = new Kuc.Text({
+                label: this.settings.i18n.textFormat,
+                value: this.settings.config.plugin.text
+            });
+            this.settings.element.input.connectiveSelect = new Kuc.Dropdown({
+                label: this.settings.i18n.connective,
+                requiredIcon: true,
+                items: this.addEmptyItem($.map(this.settings.i18n.typeOfConnective, function(typeOfConnectiveValue) {
+                    return {
+                        label: typeOfConnectiveValue.text,
+                        value: typeOfConnectiveValue.value
+                    };
+                })),
+                value: this.settings.config.plugin.connective
+            });
+            this.settings.element.input.preview = new Kuc.Text({
+                label: this.settings.i18n.numPreview,
+                value: this.settings.config.plugin.preview,
+                disabled: true
+            });
+            this.settings.element.input.timing = new Kuc.RadioButton({
+                label: this.settings.i18n.resetTiming,
+                requiredIcon: true,
+                items: $.map(this.settings.i18n.typeOfResetTiming, function(typeOfResetTimingValue, typeOfResetTimingLabel) {
+                    return {
+                        label: typeOfResetTimingValue,
+                        value: typeOfResetTimingLabel
+                    };
+                }),
+                value: this.settings.config.plugin.timing || 'none'
+            });
+            this.settings.element.input.apiToken = new Kuc.Text({
+                label: this.settings.i18n.apiToken,
+                value: this.settings.config.proxy ? this.settings.config.proxy.headers['X-Cybozu-API-Token'] : ''
+            });
+        },
+        appendElements: function() {
+            document.querySelector(this.settings.element.formSubmit).appendChild(this.settings.element.saveButton);
+            document.querySelector(this.settings.element.formSubmit).appendChild(this.settings.element.cancelButton);
+            document.querySelector(this.settings.element.targetField).appendChild(this.settings.element.input.fieldCode);
+            document.querySelector(this.settings.element.numberingOfDigits).appendChild(this.settings.element.input.numberOfDigit);
+            document.querySelector(this.settings.element.selectFormat).appendChild(this.settings.element.input.textFormatSelect);
+            document.querySelector(this.settings.element.dateFormat).appendChild(this.settings.element.input.dateFormatSelect);
+            document.querySelector(this.settings.element.textFormat).appendChild(this.settings.element.input.prefix);
+            document.querySelector(this.settings.element.connective).appendChild(this.settings.element.input.connectiveSelect);
+            document.querySelector(this.settings.element.numPreview).appendChild(this.settings.element.input.preview);
+            document.querySelector(this.settings.element.resetTiming).appendChild(this.settings.element.input.timing);
+            document.querySelector(this.settings.element.apiToken).appendChild(this.settings.element.input.apiToken);
         },
         listenAction: function() {
             var self = this;
-            $(this.settings.element.input.fieldCode + ', ' +
-                this.settings.element.input.prefix + ', ' +
-                this.settings.element.input.numberOfDigit + ', ' +
-                this.settings.element.input.textFormatSelect + ', ' +
-                this.settings.element.input.dateFormatSelect + ', ' +
-                this.settings.element.input.connectiveSelect)
+            var elements = $([this.settings.element.input.fieldCode,
+                this.settings.element.input.prefix,
+                this.settings.element.input.numberOfDigit,
+                this.settings.element.input.textFormatSelect,
+                this.settings.element.input.dateFormatSelect,
+                this.settings.element.input.connectiveSelect]);
+            elements
                 .change(function() {
+                    elements.removeAttr('error');
                     var format = self.createPreview($(self.settings.element.input.textFormatSelect).val());
                     $(self.settings.element.input.preview).html(self.escapeHtml(format || ''));
                 });
@@ -292,10 +375,10 @@
             $(this.settings.element.input.dateFormatSelect).change(function() {
                 self.propRadioTiming();
             });
-            $('button.plugin_submit').click(function() {
+            $(this.settings.element.saveButton).click(function() {
                 self.settingSave();
             });
-            $('button.plugin_cancel').click(function() {
+            $(this.settings.element.cancelButton).click(function() {
                 history.back();
             });
         },
@@ -306,9 +389,9 @@
             }
             var numOfDigit = parseInt($(this.settings.element.input.numberOfDigit).val(), 10);
             var number = new Array(numOfDigit).join('0') + '1';
-            var dateVal = $(this.settings.element.input.dateFormatSelect).val() || 'null';
+            var dateVal = $(this.settings.element.input.dateFormatSelect).val();
             var connective = $(this.settings.element.input.connectiveSelect).val() || '';
-            var date = dateVal !== 'null' ? moment().format(dateVal) : '';
+            var date = dateVal !== '' ? moment().format(dateVal) : '';
 
             switch (selectFormat) {
                 case 'numbering':
@@ -384,18 +467,18 @@
             var config = {};
             var autoNumberingFieldcode = $(this.settings.element.input.fieldCode).val();
             var format = this.formatType($(this.settings.element.input.textFormatSelect).val());
-            var preview = $(this.settings.element.input.preview).text();
+            var preview = $(this.settings.element.input.preview).val();
             var prefix = $(this.settings.element.input.prefix).val();
             var dateformat = $(this.settings.element.input.dateFormatSelect).val();
 
-            var timing = $(this.settings.element.input.timing + ':checked').val() || 'none';
+            var timing = $(this.settings.element.input.timing).val();
 
             var connective = $(this.settings.element.input.connectiveSelect).val();
             var numOfDigit = $(this.settings.element.input.numberOfDigit).val();
             var validateResult = true;
             $('.kintoneplugin-alert').remove();
 
-            if (autoNumberingFieldcode === 'null') {
+            if (autoNumberingFieldcode === '') {
                 this.alert(this.settings.element.input.fieldCode,
                     this.settings.i18n.alertMessage.notSelectedNumberingField);
                 validateResult = false;
@@ -415,7 +498,7 @@
                 validateResult = false;
             }
             // 「書式」と「日付形式」未選択チェック
-            if ((format[0] === 'date' || format[1] === 'date') && dateformat === 'null') {
+            if ((format[0] === 'date' || format[1] === 'date') && dateformat === '') {
                 this.alert(this.settings.element.input.dateFormatSelect,
                     this.settings.i18n.alertMessage.notSelectedDateFormat);
                 validateResult = false;
@@ -436,7 +519,7 @@
                 validateResult = false;
             }
 
-            if (connective === 'null') {
+            if (connective === '') {
                 this.alert(this.settings.element.input.connectiveSelect,
                     this.settings.i18n.alertMessage.notSelectedConnectionChar);
                 validateResult = false;
@@ -462,12 +545,7 @@
             return config;
         },
         alert: function(element, mess) {
-            var elementParrent = $(element).parent();
-            elementParrent.parent().find('.kintoneplugin-alert').remove();
-            if ($('.kintoneplugin-alert').length === 0) {
-                $(element).focus();
-            }
-            elementParrent.after('<div class=\'kintoneplugin-alert\'><p>' + mess + '</p></div>');
+            $(element).attr('error', mess);
         },
         formatType: function(selectformat) {
 
@@ -497,7 +575,7 @@
             switch (autonumFormat) {
 
                 case 'numbering':
-                    $(this.settings.element.input.dateFormatSelect).val(['null']);
+                    $(this.settings.element.input.dateFormatSelect).val('');
                     $(this.settings.element.input.prefix).val('');
                     this.propElement(this.settings.element.input.dateFormatSelect, true);
                     this.propElement(this.settings.element.input.prefix, true);
@@ -515,7 +593,7 @@
                     break;
 
                 case 'textNumbering':
-                    $(this.settings.element.input.dateFormatSelect).val(['null']);
+                    $(this.settings.element.input.dateFormatSelect).val('');
                     this.propElement(this.settings.element.input.dateFormatSelect, true);
                     this.propElement(this.settings.element.input.prefix, false);
                     break;
@@ -526,7 +604,7 @@
                     break;
 
                 default:
-                    $(this.settings.element.input.dateFormatSelect).val(['null']);
+                    $(this.settings.element.input.dateFormatSelect).val('');
                     $(this.settings.element.input.prefix).val('');
                     this.propElement(this.settings.element.input.dateFormatSelect, true);
                     this.propElement(this.settings.element.input.prefix, true);
@@ -534,51 +612,52 @@
         },
         propRadioTiming: function() {
             var dateformat = $(this.settings.element.input.dateFormatSelect).val();
-            var timing = $(this.settings.element.input.timing + ':checked').val() || 'none';
+            var timing = $(this.settings.element.input.timing).val();
             switch (dateformat) {
                 case 'MMDDYYYY':
                 case 'MMDDYY':
                 case 'YYYYMMDD':
-                    this.propElement('#autonum-resetTiming-yearly', false);
-                    this.propElement('#autonum-resetTiming-monthly', false);
-                    this.propElement('#autonum-resetTiming-daily', false);
+                    // TODO: itemごとのdisableが指定できるようになったら，対応する．
+                    // this.propElement('#autonum-resetTiming-yearly', false);
+                    // this.propElement('#autonum-resetTiming-monthly', false);
+                    // this.propElement('#autonum-resetTiming-daily', false);
                     break;
                 case 'MMYYYY':
                 case 'MMYY':
                 case 'YYYYMM':
-                    this.propElement('#autonum-resetTiming-yearly', false);
-                    this.propElement('#autonum-resetTiming-monthly', false);
-                    this.propElement('#autonum-resetTiming-daily', true);
+                    // this.propElement('#autonum-resetTiming-yearly', false);
+                    // this.propElement('#autonum-resetTiming-monthly', false);
+                    // this.propElement('#autonum-resetTiming-daily', true);
                     if (timing === 'daily') {
-                        $(this.settings.element.input.timing).val(['none']);
+                        $(this.settings.element.input.timing).val('none')
                     }
                     break;
 
                 case 'MMDD':
-                    this.propElement('#autonum-resetTiming-yearly', true);
+                    // this.propElement('#autonum-resetTiming-yearly', true);
                     if (timing === 'yearly') {
-                        $(this.settings.element.input.timing).val(['none']);
+                        $(this.settings.element.input.timing).val('none')
                     }
 
-                    this.propElement('#autonum-resetTiming-monthly', false);
-                    this.propElement('#autonum-resetTiming-daily', false);
+                    // this.propElement('#autonum-resetTiming-monthly', false);
+                    // this.propElement('#autonum-resetTiming-daily', false);
                     break;
 
                 case 'YYYY':
                 case 'YY':
-                    this.propElement('#autonum-resetTiming-yearly', false);
-
-                    this.propElement('#autonum-resetTiming-monthly', true);
-                    this.propElement('#autonum-resetTiming-daily', true);
+                    // this.propElement('#autonum-resetTiming-yearly', false);
+                    //
+                    // this.propElement('#autonum-resetTiming-monthly', true);
+                    // this.propElement('#autonum-resetTiming-daily', true);
                     if (timing !== 'yearly') {
-                        $(this.settings.element.input.timing).val(['none']);
+                        $(this.settings.element.input.timing).val('none')
                     }
                     break;
                 default:
-                    this.propElement('#autonum-resetTiming-yearly', true);
-                    this.propElement('#autonum-resetTiming-monthly', true);
-                    this.propElement('#autonum-resetTiming-daily', true);
-                    $(this.settings.element.input.timing).val(['none']);
+                    // this.propElement('#autonum-resetTiming-yearly', true);
+                    // this.propElement('#autonum-resetTiming-monthly', true);
+                    // this.propElement('#autonum-resetTiming-daily', true);
+                    $(this.settings.element.input.timing).val('none')
                     break;
             }
         },
@@ -604,6 +683,12 @@
         isNumberPositive: function(number) {
             var regex = /^(?:[1-9]\d*|\d)$/;
             return regex.test(number.toString());
+        },
+        addEmptyItem: function(items) {
+            return $.merge([{
+                label: '-----',
+                value: ''
+            }], items);
         }
     };
     kintonePluginConfigAutonum.init();
